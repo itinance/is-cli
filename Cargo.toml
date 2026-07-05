@@ -5,7 +5,7 @@ edition = "2021"
 description = "Ask your terminal yes/no questions, answered by a read-only Claude agent"
 license = "MIT"
 readme = "README.md"
-keywords = ["cli", "claude", "ai", "shell", "question"]
+keywords = ["cli", "claude", "ai", "terminal", "agentic-workflows"]
 categories = ["command-line-utilities"]
 exclude = ["docs/", ".github/"]
 
