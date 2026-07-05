@@ -3,5 +3,6 @@ pub mod cli;
 pub mod config;
 pub mod model;
 pub mod prompt;
+pub mod runner;
 pub mod stream;
 pub mod verdict;
