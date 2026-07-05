@@ -8,7 +8,18 @@ fn main() {
 }
 
 fn run() -> i32 {
-    let args = cli::Cli::parse();
+    let args = match cli::Cli::try_parse() {
+        Ok(args) => args,
+        Err(e) => {
+            use clap::error::ErrorKind;
+            if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
+                let _ = e.print();
+                return 0;
+            }
+            eprint!("{e}");
+            return 3;
+        }
+    };
 
     let cfg_path = config::config_path();
     let cfg = cfg_path.as_deref().map(config::load).unwrap_or_default();

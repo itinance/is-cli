@@ -277,6 +277,54 @@ fn missing_claude_binary_exits_three_with_install_hint() {
         .stderr(predicate::str::contains("not found on PATH"));
 }
 
+/// Spec: exit 3 = "operational error (... invalid flags)", exit 2 = "can't
+/// determine". clap's default self-exit on a usage error is 2, which
+/// collides with the "can't determine" verdict code, so `is` must intercept
+/// usage errors via `try_parse` and remap them to 3.
+#[test]
+fn unknown_flag_exits_three() {
+    let sandbox = tempfile::tempdir().unwrap();
+    is_cmd(&sandbox)
+        .args(["--nope", "this", "merged"])
+        .assert()
+        .code(3)
+        .stderr(
+            predicate::str::contains("unexpected argument")
+                .or(predicate::str::contains("unrecognized")),
+        );
+}
+
+#[test]
+fn bad_timeout_value_exits_three() {
+    let sandbox = tempfile::tempdir().unwrap();
+    is_cmd(&sandbox)
+        .args(["--timeout", "abc", "this", "merged"])
+        .assert()
+        .code(3);
+}
+
+#[test]
+fn missing_question_exits_three() {
+    let sandbox = tempfile::tempdir().unwrap();
+    is_cmd(&sandbox).assert().code(3);
+}
+
+#[test]
+fn help_flag_exits_zero_with_usage_on_stdout() {
+    let sandbox = tempfile::tempdir().unwrap();
+    is_cmd(&sandbox)
+        .args(["--help"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("Usage"));
+}
+
+#[test]
+fn version_flag_exits_zero() {
+    let sandbox = tempfile::tempdir().unwrap();
+    is_cmd(&sandbox).args(["--version"]).assert().code(0);
+}
+
 /// A descendant of the fake shim (a detached `sleep 30 &`) inherits the piped
 /// stdout/stderr fds and keeps them open well after the shim itself is done.
 /// If `is` only killed the direct child, the pipe-reader threads would block
