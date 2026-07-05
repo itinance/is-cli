@@ -73,3 +73,10 @@ one) to keep working. Until then: your login, your quota, your usage.
 The agent runs with a hard allowlist enforced by Claude Code's permission system —
 `git` inspection subcommands, `gh pr/run view`, `date`, and file reads. It cannot
 write, edit, push, or even `git fetch`. **`is` never changes your system.**
+
+## Development
+
+```sh
+cargo test                                   # unit + integration tests
+cargo llvm-cov --open                        # coverage report (requires cargo-llvm-cov)
+```

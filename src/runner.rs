@@ -242,3 +242,97 @@ fn kill_group(child: &mut Child) {
 fn kill_group(child: &mut Child) {
     let _ = child.kill();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Runs `sh -c script` through `run_claude`, panicking if spawning `sh`
+    /// itself fails (it's assumed present; CI only targets ubuntu/macos).
+    fn run(script: &str, timeout: Duration) -> RunOutcome {
+        run_claude(
+            "sh",
+            &["-c".to_string(), script.to_string()],
+            timeout,
+            false,
+        )
+        .unwrap_or_else(|_| panic!("expected `sh` to spawn"))
+    }
+
+    #[test]
+    fn spawn_error_when_program_not_found() {
+        let result = run_claude(
+            "definitely-not-a-real-binary-xyz",
+            &[],
+            Duration::from_secs(1),
+            false,
+        );
+        assert!(matches!(result, Err(SpawnError::NotFound)));
+    }
+
+    #[test]
+    fn captures_result_text_and_success() {
+        let outcome = run(
+            r#"echo '{"type":"result","result":"yes","is_error":false}'"#,
+            Duration::from_secs(2),
+        );
+        assert_eq!(outcome.final_text.as_deref(), Some("yes"));
+        assert!(!outcome.is_error);
+        assert!(!outcome.timed_out);
+        assert!(outcome.status_ok);
+    }
+
+    #[test]
+    fn propagates_is_error_flag_from_result_event() {
+        let outcome = run(
+            r#"echo '{"type":"result","result":"broken","is_error":true}'"#,
+            Duration::from_secs(2),
+        );
+        assert_eq!(outcome.final_text.as_deref(), Some("broken"));
+        assert!(outcome.is_error);
+    }
+
+    #[test]
+    fn ignores_unparseable_lines_before_result() {
+        let outcome = run(
+            r#"echo 'not json'; echo '{"type":"result","result":"ok","is_error":false}'"#,
+            Duration::from_secs(2),
+        );
+        assert_eq!(outcome.final_text.as_deref(), Some("ok"));
+    }
+
+    #[test]
+    fn no_result_event_but_clean_exit_is_status_ok_with_no_text() {
+        let outcome = run("true", Duration::from_secs(2));
+        assert_eq!(outcome.final_text, None);
+        assert!(!outcome.timed_out);
+        assert!(outcome.status_ok);
+    }
+
+    #[test]
+    fn nonzero_exit_without_result_is_not_status_ok() {
+        let outcome = run("exit 1", Duration::from_secs(2));
+        assert_eq!(outcome.final_text, None);
+        assert!(!outcome.status_ok);
+        assert!(!outcome.timed_out);
+    }
+
+    #[test]
+    fn timeout_kills_child_and_reports_timed_out() {
+        let start = Instant::now();
+        let outcome = run("sleep 5", Duration::from_millis(80));
+        assert!(outcome.timed_out);
+        assert_eq!(outcome.final_text, None);
+        assert!(!outcome.status_ok);
+        assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn captures_stderr_output() {
+        let outcome = run(
+            r#"echo 'oops' 1>&2; echo '{"type":"result","result":"ok","is_error":false}'"#,
+            Duration::from_secs(2),
+        );
+        assert!(outcome.stderr.contains("oops"));
+    }
+}
