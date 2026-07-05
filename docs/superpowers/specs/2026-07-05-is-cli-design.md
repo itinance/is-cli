@@ -89,6 +89,10 @@ $ is this refactor fully covered by tests using sonnet
 are treated as part of the question and nothing is stripped. On persist, print a
 one-line notice to stderr: `model set to sonnet (stored in ~/.config/is/config.toml)`.
 
+If both `using <model>` and `--model` are given, the `using` phrase still persists,
+but `--model` wins for the current run. Model strings are passed through verbatim —
+validity is delegated to `claude`, whose error surfaces as exit 3.
+
 ### Config file
 
 `$XDG_CONFIG_HOME/is/config.toml`, falling back to `~/.config/is/config.toml` on all
