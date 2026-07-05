@@ -54,6 +54,20 @@ is this refactor fully covered by tests using sonnet
 
 Stored in `~/.config/is/config.toml` (edit or delete freely).
 
+## A note on subscription auth
+
+`is` deliberately wraps your locally installed `claude` CLI instead of calling the
+Claude API directly. Questions therefore run on whatever auth your Claude Code
+login uses — for Pro/Max users, that's your subscription, with no separate API key
+or per-token billing.
+
+This works because Claude Code's headless mode (`claude -p`) inherits the normal
+login path. It is **not** a contractual guarantee: whether subscription quota may
+be consumed this way is ultimately Anthropic's call, and a future Claude Code
+version or policy change could restrict headless subscription use. If that
+happens, `is` would need an API-key mode (or your Claude Code setup would need
+one) to keep working. Until then: your login, your quota, your usage.
+
 ## The read-only guarantee
 
 The agent runs with a hard allowlist enforced by Claude Code's permission system —
