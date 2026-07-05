@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"abc"}
+{"type":"result","subtype":"success","is_error":false,"result":"{\"verdict\": \"no\", \"answer\": \"HEAD has 3 commits not on origin/main\"}"}
