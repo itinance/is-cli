@@ -19,7 +19,11 @@ pub fn parse_line(line: &str) -> Vec<Event> {
                     .iter()
                     .filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_use"))
                     .map(|b| {
-                        let name = b.get("name").and_then(Value::as_str).unwrap_or("tool").to_string();
+                        let name = b
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or("tool")
+                            .to_string();
                         let detail = tool_detail(&name, b.get("input"));
                         Event::ToolUse { name, detail }
                     })
@@ -27,7 +31,11 @@ pub fn parse_line(line: &str) -> Vec<Event> {
             })
             .unwrap_or_default(),
         Some("result") => vec![Event::Result {
-            text: v.get("result").and_then(Value::as_str).unwrap_or("").to_string(),
+            text: v
+                .get("result")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
             is_error: v.get("is_error").and_then(Value::as_bool).unwrap_or(false),
         }],
         _ => Vec::new(),
@@ -35,14 +43,20 @@ pub fn parse_line(line: &str) -> Vec<Event> {
 }
 
 fn tool_detail(name: &str, input: Option<&Value>) -> String {
-    let Some(input) = input else { return String::new() };
+    let Some(input) = input else {
+        return String::new();
+    };
     let key = match name {
         "Bash" => "command",
         "Read" => "file_path",
         "Grep" | "Glob" => "pattern",
         _ => return String::new(),
     };
-    input.get(key).and_then(Value::as_str).unwrap_or("").to_string()
+    input
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
 }
 
 #[cfg(test)]
@@ -67,8 +81,14 @@ mod tests {
         assert_eq!(
             parse_line(line),
             vec![
-                Event::ToolUse { name: "Read".into(), detail: "/repo/Cargo.toml".into() },
-                Event::ToolUse { name: "Grep".into(), detail: "version".into() },
+                Event::ToolUse {
+                    name: "Read".into(),
+                    detail: "/repo/Cargo.toml".into()
+                },
+                Event::ToolUse {
+                    name: "Grep".into(),
+                    detail: "version".into()
+                },
             ]
         );
     }
@@ -78,14 +98,20 @@ mod tests {
         let line = r#"{"type":"result","subtype":"success","is_error":false,"result":"{\"verdict\": \"yes\", \"answer\": \"ok\"}"}"#;
         assert_eq!(
             parse_line(line),
-            vec![Event::Result { text: "{\"verdict\": \"yes\", \"answer\": \"ok\"}".into(), is_error: false }]
+            vec![Event::Result {
+                text: "{\"verdict\": \"yes\", \"answer\": \"ok\"}".into(),
+                is_error: false
+            }]
         );
     }
 
     #[test]
     fn ignores_init_text_only_and_garbage_lines() {
         assert!(parse_line(r#"{"type":"system","subtype":"init","session_id":"abc"}"#).is_empty());
-        assert!(parse_line(r#"{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}"#).is_empty());
+        assert!(parse_line(
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}"#
+        )
+        .is_empty());
         assert!(parse_line("not json at all").is_empty());
         assert!(parse_line("").is_empty());
     }

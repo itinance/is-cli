@@ -25,7 +25,10 @@ pub fn load(path: &Path) -> Config {
     match toml::from_str(&text) {
         Ok(cfg) => cfg,
         Err(err) => {
-            eprintln!("warning: ignoring malformed config {}: {err}", path.display());
+            eprintln!(
+                "warning: ignoring malformed config {}: {err}",
+                path.display()
+            );
             Config::default()
         }
     }
@@ -66,7 +69,9 @@ mod tests {
     fn save_then_load_roundtrips_and_creates_dirs() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("deep/is/config.toml");
-        let cfg = Config { model: Some("sonnet".into()) };
+        let cfg = Config {
+            model: Some("sonnet".into()),
+        };
         save(&path, &cfg).unwrap();
         assert_eq!(load(&path), cfg);
     }
@@ -76,7 +81,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
         std::fs::write(&path, "model = \"opus\"\nfuture_knob = 3\n").unwrap();
-        assert_eq!(load(&path), Config { model: Some("opus".into()) });
+        assert_eq!(
+            load(&path),
+            Config {
+                model: Some("opus".into())
+            }
+        );
     }
 
     #[test]

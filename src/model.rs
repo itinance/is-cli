@@ -82,11 +82,17 @@ mod tests {
     fn resolution_precedence() {
         let s = |x: &str| Some(x.to_string());
         // --model flag wins over everything
-        assert_eq!(resolve_model(s("opus"), true, s("sonnet"), s("haiku")), s("opus"));
+        assert_eq!(
+            resolve_model(s("opus"), true, s("sonnet"), s("haiku")),
+            s("opus")
+        );
         // -H beats using/config: None = inherit claude default
         assert_eq!(resolve_model(None, true, s("sonnet"), s("haiku")), None);
         // using beats config
-        assert_eq!(resolve_model(None, false, s("sonnet"), s("opus")), s("sonnet"));
+        assert_eq!(
+            resolve_model(None, false, s("sonnet"), s("opus")),
+            s("sonnet")
+        );
         // config beats built-in default
         assert_eq!(resolve_model(None, false, None, s("opus")), s("opus"));
         // built-in default

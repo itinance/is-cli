@@ -121,7 +121,10 @@ pub fn run_claude(
                                 }
                             }
                         }
-                        Event::Result { text, is_error: err } => {
+                        Event::Result {
+                            text,
+                            is_error: err,
+                        } => {
                             final_text = Some(text);
                             is_error = err;
                             got_result = true;
@@ -180,11 +183,19 @@ pub fn run_claude(
         Ok(buf) => buf,
         Err(_) => {
             kill_group(&mut child);
-            stderr_rx.recv_timeout(STDERR_POST_KILL_WAIT).unwrap_or_default()
+            stderr_rx
+                .recv_timeout(STDERR_POST_KILL_WAIT)
+                .unwrap_or_default()
         }
     };
 
-    Ok(RunOutcome { final_text, is_error, timed_out, stderr, status_ok })
+    Ok(RunOutcome {
+        final_text,
+        is_error,
+        timed_out,
+        stderr,
+        status_ok,
+    })
 }
 
 /// Poll `child.try_wait()` until it exits or `deadline` passes. Returns the

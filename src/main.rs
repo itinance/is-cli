@@ -11,10 +11,7 @@ fn run() -> i32 {
     let args = cli::Cli::parse();
 
     let cfg_path = config::config_path();
-    let cfg = cfg_path
-        .as_deref()
-        .map(config::load)
-        .unwrap_or_default();
+    let cfg = cfg_path.as_deref().map(config::load).unwrap_or_default();
 
     let (question, using_model) = model::extract_using_model(&args.question);
     if question.is_empty() {
@@ -25,7 +22,9 @@ fn run() -> i32 {
     if let Some(m) = &using_model {
         match &cfg_path {
             Some(p) => {
-                let new_cfg = config::Config { model: Some(m.clone()) };
+                let new_cfg = config::Config {
+                    model: Some(m.clone()),
+                };
                 match config::save(p, &new_cfg) {
                     Ok(()) => eprintln!("model set to {m} (stored in {})", p.display()),
                     Err(e) => eprintln!("warning: could not store model: {e}"),

@@ -162,8 +162,7 @@ fn using_model_is_stripped_and_persisted() {
         .assert()
         .code(0)
         .stderr(predicate::str::contains("model set to sonnet"));
-    let stored =
-        fs::read_to_string(sandbox.path().join("xdg/is/config.toml")).unwrap();
+    let stored = fs::read_to_string(sandbox.path().join("xdg/is/config.toml")).unwrap();
     assert!(stored.contains("model = \"sonnet\""), "got: {stored}");
 }
 
@@ -189,7 +188,11 @@ fn model_flag_overrides_run_but_using_still_persists() {
         .iter()
         .position(|a| *a == "--model")
         .expect("claude invoked without --model");
-    assert_eq!(args[idx + 1], "opus", "run should use the --model override: {argv}");
+    assert_eq!(
+        args[idx + 1],
+        "opus",
+        "run should use the --model override: {argv}"
+    );
 
     let stored = fs::read_to_string(sandbox.path().join("xdg/is/config.toml")).unwrap();
     assert!(

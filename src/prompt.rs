@@ -64,7 +64,14 @@ mod tests {
         assert!(!joined.contains("--bare"));
         // allowlist is passed after --allowedTools, one arg per entry
         let idx = args.iter().position(|a| a == "--allowedTools").unwrap();
-        assert_eq!(&args[idx + 1..], ALLOWED_TOOLS.iter().map(|s| s.to_string()).collect::<Vec<_>>().as_slice());
+        assert_eq!(
+            &args[idx + 1..],
+            ALLOWED_TOOLS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+                .as_slice()
+        );
     }
 
     #[test]

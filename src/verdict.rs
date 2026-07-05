@@ -33,12 +33,16 @@ struct RawVerdict {
 
 pub fn parse_verdict(text: &str) -> Option<(Verdict, String)> {
     let trimmed = text.trim();
-    if let Some(v) = serde_json::from_str::<RawVerdict>(trimmed).ok().and_then(from_raw) {
+    if let Some(v) = serde_json::from_str::<RawVerdict>(trimmed)
+        .ok()
+        .and_then(from_raw)
+    {
         return Some(v);
     }
     // Fallback: first parseable JSON object with a valid verdict, embedded in prose.
     for (i, _) in trimmed.match_indices('{') {
-        let mut stream = serde_json::Deserializer::from_str(&trimmed[i..]).into_iter::<RawVerdict>();
+        let mut stream =
+            serde_json::Deserializer::from_str(&trimmed[i..]).into_iter::<RawVerdict>();
         if let Some(Ok(raw)) = stream.next() {
             if let Some(v) = from_raw(raw) {
                 return Some(v);
