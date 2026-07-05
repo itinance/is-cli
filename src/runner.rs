@@ -53,7 +53,8 @@ pub fn run_claude(
     // signal the whole group (child + any subprocesses it spawns) rather than
     // just the direct child. Without this, a descendant that inherited the
     // piped stderr fd can keep it open after we kill the direct child, and
-    // `stderr_thread.join()` below would block forever waiting for EOF.
+    // the stderr-reader thread's `read_to_string` (handed off over a channel
+    // below, not joined) would never see EOF.
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -221,7 +222,10 @@ fn reap(child: &mut Child, deadline: Instant) -> (Option<std::process::ExitStatu
 
 /// Kill the child's whole process group (it was placed into its own group at
 /// spawn time on unix) so descendants that inherited the piped stderr fd are
-/// also signalled, allowing `stderr_thread.join()` to observe EOF. Falls back
+/// also signalled. Killing them closes their copy of the pipe's write end,
+/// which lets the stderr-reader thread's `read_to_string` hit EOF and hand
+/// its buffer off over the mpsc channel, so the bounded `recv_timeout` on the
+/// receiving end can complete instead of blocking indefinitely. Falls back
 /// to killing just the direct child if that fails, or on non-unix targets.
 #[cfg(unix)]
 fn kill_group(child: &mut Child) {
