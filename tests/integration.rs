@@ -9,8 +9,15 @@ fn fixtures_dir() -> PathBuf {
 }
 
 /// Writes a fake `claude` shim into `dir` that replays fixtures / simulates failures.
+///
+/// If `FAKE_CLAUDE_ARGV_FILE` is set, the shim dumps its argv (one per line)
+/// to that path before doing anything else, so tests can assert on exactly
+/// what `is` invoked it with.
 fn write_fake_claude(dir: &Path) {
     let script = "#!/usr/bin/env bash\n\
+if [ -n \"$FAKE_CLAUDE_ARGV_FILE\" ]; then\n\
+  printf '%s\\n' \"$@\" > \"$FAKE_CLAUDE_ARGV_FILE\"\n\
+fi\n\
 case \"${FAKE_CLAUDE_MODE:-ok}\" in\n\
   ok)   cat \"$FAKE_CLAUDE_FIXTURE\" ;;\n\
   hang) sleep 30 ;;\n\
@@ -24,6 +31,17 @@ case \"${FAKE_CLAUDE_MODE:-ok}\" in\n\
     # process-group kill rather than a normal exit/reap.\n\
     sleep 30 &\n\
     sleep 5\n\
+    ;;\n\
+  quick_descendant)\n\
+    cat \"$FAKE_CLAUDE_FIXTURE\"\n\
+    # Spawn a detached background process that inherits stdout/stderr and\n\
+    # outlives us, but -- unlike `descendant` -- exit immediately ourselves\n\
+    # instead of sticking around. This exercises the case where `reap`\n\
+    # reaps the direct child right away (no deadline expiry, so no kill from\n\
+    # `reap` itself) while a lingering descendant still holds the piped\n\
+    # stderr fd open, which is what the bounded stderr-collection handoff\n\
+    # (rather than `reap`'s kill) has to rescue us from.\n\
+    sleep 30 &\n\
     ;;\n\
 esac\n";
     let path = dir.join("claude");
@@ -149,16 +167,83 @@ fn using_model_is_stripped_and_persisted() {
     assert!(stored.contains("model = \"sonnet\""), "got: {stored}");
 }
 
+/// Spec: "`using <model>` persists even when `--model` overrides the run."
+/// `--model opus` should govern this invocation's actual claude argv, while
+/// the trailing `using sonnet` should still be persisted to config.toml for
+/// future runs -- and the "model set to sonnet" notice should still print.
+#[test]
+fn model_flag_overrides_run_but_using_still_persists() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let argv_file = sandbox.path().join("argv.txt");
+    is_cmd(&sandbox)
+        .env("FAKE_CLAUDE_FIXTURE", fixture("yes.jsonl"))
+        .env("FAKE_CLAUDE_ARGV_FILE", &argv_file)
+        .args(["--model", "opus", "this", "merged", "using", "sonnet"])
+        .assert()
+        .code(0)
+        .stderr(predicate::str::contains("model set to sonnet"));
+
+    let argv = fs::read_to_string(&argv_file).unwrap();
+    let args: Vec<&str> = argv.lines().collect();
+    let idx = args
+        .iter()
+        .position(|a| *a == "--model")
+        .expect("claude invoked without --model");
+    assert_eq!(args[idx + 1], "opus", "run should use the --model override: {argv}");
+
+    let stored = fs::read_to_string(sandbox.path().join("xdg/is/config.toml")).unwrap();
+    assert!(
+        stored.contains("model = \"sonnet\""),
+        "using's model should persist even though --model overrode the run: got {stored}"
+    );
+}
+
 #[test]
 fn timeout_kills_child_and_exits_two() {
     let sandbox = tempfile::tempdir().unwrap();
+    let start = Instant::now();
     is_cmd(&sandbox)
         .env("FAKE_CLAUDE_MODE", "hang")
         .env("FAKE_CLAUDE_FIXTURE", fixture("yes.jsonl"))
-        .args(["--timeout", "1", "this", "merged"])
+        .args(["--timeout", "2", "this", "merged"])
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("couldn't determine within 1s"));
+        .stderr(predicate::str::contains("couldn't determine within 2s"));
+    let elapsed = start.elapsed();
+    // A regression to an unbounded wait (e.g. a blocking join on the stderr
+    // reader thread) would hang this test instead of failing it, so assert
+    // an explicit wall-clock bound rather than relying on exit code alone.
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "expected is to return promptly after the 2s timeout, took {elapsed:?}"
+    );
+}
+
+/// Regression test for a bug where `run_claude` joined the stderr-reader
+/// thread unconditionally after reaping the direct child. If the direct
+/// child exits promptly (so `reap` never needs to kill anything) but leaves
+/// behind a detached descendant that inherited the piped stderr fd, the join
+/// would block until that descendant exits -- with no bound, defeating
+/// `--timeout`. Unlike `descendant_outliving_shim_is_reaped_via_process_group_kill`,
+/// this shim does NOT stay alive itself after backgrounding the sleeper, so
+/// `reap`'s own deadline-triggered kill never fires; only the bounded stderr
+/// handoff's independent kill can rescue this.
+#[test]
+fn quick_exit_with_lingering_descendant_returns_promptly() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let start = Instant::now();
+    is_cmd(&sandbox)
+        .env("FAKE_CLAUDE_MODE", "quick_descendant")
+        .env("FAKE_CLAUDE_FIXTURE", fixture("yes.jsonl"))
+        .args(["this", "merged"])
+        .assert()
+        .code(0)
+        .stdout("yes — feature/login is in origin/main (a1b2c3d)\n");
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "expected is to return promptly despite the lingering descendant, took {elapsed:?}"
+    );
 }
 
 #[test]

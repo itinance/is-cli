@@ -26,6 +26,17 @@ const RESULT_GRACE: Duration = Duration::from_millis(500);
 /// Poll interval used while bounded-reaping the child (see `reap`).
 const REAP_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
+/// Floor applied to the stderr collection wait so that, even when the stream
+/// loop exits immediately (e.g. a result short-circuit with no time left on
+/// the deadline), we still give the stderr thread a brief window to hand off
+/// whatever it's already buffered rather than giving up with zero wait.
+const STDERR_WAIT_FLOOR: Duration = Duration::from_millis(100);
+
+/// Extra wait after a process-group kill to pick up stderr that the kill just
+/// released (the descendant holding the pipe open should die promptly once
+/// signalled).
+const STDERR_POST_KILL_WAIT: Duration = Duration::from_millis(250);
+
 pub fn run_claude(
     program: &str,
     args: &[String],
@@ -69,10 +80,19 @@ pub fn run_claude(
             }
         }
     });
-    let stderr_thread = std::thread::spawn(move || {
+    // Hand stderr off over a channel rather than joining the reader thread
+    // directly: a descendant of the child that inherited the piped stderr fd
+    // (see the `process_group` comment above) can keep that fd open long
+    // after the direct child has exited, so `read_to_string` may not return
+    // for a long time -- possibly never, if the descendant outlives the
+    // whole `is` invocation. Sending over a channel lets the main thread wait
+    // with a bound and move on, leaving the reader thread to finish (or not)
+    // on its own, detached, rather than blocking `run_claude`'s return on it.
+    let (stderr_tx, stderr_rx) = mpsc::channel();
+    let _stderr_thread = std::thread::spawn(move || {
         let mut buf = String::new();
         let _ = BufReader::new(stderr_pipe).read_to_string(&mut buf);
-        buf
+        let _ = stderr_tx.send(buf);
     });
 
     let deadline = Instant::now() + timeout;
@@ -143,7 +163,26 @@ pub fn run_claude(
         wait_status.map(|s| s.success()).unwrap_or(false)
     };
 
-    let stderr = stderr_thread.join().unwrap_or_default();
+    // Bounded stderr collection (see the channel-handoff comment above): wait
+    // for the reader thread to hand off its buffer, bounded by whatever's
+    // left of `reap_deadline` (with a small floor so a result short-circuit
+    // with little/no time left still gets a chance to collect stderr that's
+    // already sitting in the pipe). If that times out, a descendant is
+    // likely still holding the fd open -- kill the whole process group (a
+    // no-op if `reap` already did this) and give the reader thread one more
+    // short window to flush what the kill just released. If it still hasn't
+    // shown up, proceed with empty stderr; the reader thread is left to die
+    // on its own (or with the process) rather than blocking us further.
+    let stderr_budget = reap_deadline
+        .saturating_duration_since(Instant::now())
+        .max(STDERR_WAIT_FLOOR);
+    let stderr = match stderr_rx.recv_timeout(stderr_budget) {
+        Ok(buf) => buf,
+        Err(_) => {
+            kill_group(&mut child);
+            stderr_rx.recv_timeout(STDERR_POST_KILL_WAIT).unwrap_or_default()
+        }
+    };
 
     Ok(RunOutcome { final_text, is_error, timed_out, stderr, status_ok })
 }
