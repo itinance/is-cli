@@ -70,9 +70,17 @@ one) to keep working. Until then: your login, your quota, your usage.
 
 ## The read-only guarantee
 
-The agent runs with a hard allowlist enforced by Claude Code's permission system —
-`git` inspection subcommands, `gh pr/run view`, `date`, and file reads. It cannot
-write, edit, push, or even `git fetch`. **`is` never changes your system.**
+The agent runs with a hard allowlist enforced by Claude Code's permission system:
+read-only `git`/`gh` inspection, file reads and search, and read-only system
+queries (`ps`, `lsof`, `df`, `sw_vers`, `xcode-select -p`, `brew list`, …). Every
+allowlisted command is scoped away from its mutating sibling — no `git fetch`/`push`,
+no `brew install`, no `defaults write`. It cannot write, edit, or change a setting.
+**`is` never changes your system.**
+
+Two allowlisted tools reach the network, read-only: `WebFetch` (fetch a URL) and
+`dig` (DNS lookup), so questions like "is my installed version the latest?" work.
+They read *from* the network but cannot write to it — and `is` has no access to
+your environment variables, so there are no secrets in scope to leak.
 
 ## Development
 
